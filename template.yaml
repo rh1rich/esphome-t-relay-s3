@@ -1,0 +1,269 @@
+substitutions:
+  devicename: trelays3
+  friendly_devicename: T-RelayS3
+
+esphome:
+  name: $devicename
+  friendly_name: $friendly_devicename
+  on_boot:
+    then:
+      # read time from RTC on boot
+      - pcf8563.read_time: time_onboard
+
+# ESP32-S3-WROOM-1U-N16R8
+# Flash: 16MB (QuadSPI)
+# PSRAM: 8MB (OctalSPI)
+
+esp32:
+  board: esp32s3box
+  framework:
+    type: arduino
+
+psram:
+  mode: octal
+
+# Enable logging
+logger:
+#  level: VERBOSE
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret "api_key"
+  reboot_timeout: 0s
+
+ota:
+  - platform: esphome
+    password: !secret "ota_password"
+
+wifi:
+  ssid: !secret "wifi_ssid"
+  password: !secret "wifi_password"
+  fast_connect: yes
+
+  manual_ip:
+    static_ip: 10.12.1.199
+    subnet: 255.255.255.0
+    gateway: !secret "wifi_gateway"
+    dns1: !secret "wifi_dns1"
+    dns2: !secret "wifi_dns2"
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "$devicename"
+    password: !secret "wifi_fallback_password"
+
+captive_portal:
+
+web_server:
+  port: 80
+  version: 3
+
+# Connectors:
+#   EC ... expansion connector (30 pins)
+#   DC ... display connector (14 pins)
+#   CC ... cascading connector (20 pins)
+
+# GPIO-Mapping:
+#   GPIO00 ... Button BOOT
+#   GPIO01 ... [CC 13]
+#   GPIO02 ... [CC 15]
+#   GPIO03 ... [EC 09, DC 04 (TFT_RST)]
+#   GPIO04 ... SN74HC595 OE (only on board rev. 1.1) [EC 07]
+#   GPIO05 ... SN74HC595 Clock [CC 18]
+#   GPIO06 ... SN74HC595 Latch [CC 20]
+#   GPIO07 ... SN74HC595 Data
+#   GPIO08 ... [EC 10, DC 03 (TFT_CS)]
+#   GPIO09 ... [EC 11, DC 08 (TFT_BL)]
+#   GPIO10 ... [EC 14, DC 11 (TFT_TP_CS)]
+#   GPIO11 ... [EC 13, DC 06, DC 12 (TFT_MOSI)]
+#   GPIO12 ... [EC 16, DC 09, DC 13 (TFT_MISO)]
+#   GPIO13 ... [EC 15, DC 07, DC 10 (TFT_CLK)]
+#   GPIO14 ... [EC 18, DC 14 (TFT_TP_INT)]
+#   GPIO15 ... [EC 30]
+#   GPIO16 ... I2C SDA --> PCF8563 [EC 02, EC 24, CC 09]
+#   GPIO17 ... I2C SCL --> PCF8563 [EC 04, EC 26, CC 11]
+#   GPIO18 ... PCF8563 IRQ [EC 28]
+
+#   GPIO21 ... One-Wire --> DS18B20 (if connected to the board)
+
+#   GPIO38 ... [EC 21]
+
+#   GPIO45 ... [EC 29]
+#   GPIO46 ... [EC 12, DC 05 (TFT_DC)]
+#   GPIO47 ... [EC 19]
+#   GPIO48 ... [EC 27]
+
+
+one_wire:
+  - platform: gpio
+    pin: GPIO21
+
+i2c:
+  sda: GPIO16
+  scl: GPIO17
+
+# Onboard RTC is PCF8563, IRQ is connected to GPIO18
+time:
+  - platform: pcf8563
+    address: 0x51
+    id: time_onboard
+    update_interval: never
+  - platform: homeassistant
+    id: time_hass
+    on_time_sync:
+      then:
+        # update RTC after successful synchronization
+        - pcf8563.write_time: time_onboard
+
+# Using green led to signal network status:
+#   Blinking = wifi connected
+#   Constantly on = api connected
+interval:
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            api.connected:
+          then:
+            - output.turn_on: out_led_green
+          else:
+            - if:
+                condition:
+                  wifi.connected:
+                then:
+                  - output.turn_on: out_led_green
+                  - delay: 500ms
+                  - output.turn_off: out_led_green
+                else:
+                  - output.turn_off: out_led_green
+
+sn74hc595:
+  - id: output_sr
+    data_pin: GPIO07
+    clock_pin: GPIO05
+    latch_pin: GPIO06
+    # Output enable is only on boards with rev. 1.1 connected to GPIO04 !
+    # oe_pin: GPIO04
+    sr_count: 1
+
+switch:
+  - platform: gpio
+    name: "Relay CH1"
+    pin:
+      sn74hc595: output_sr
+      number: 0
+      inverted: false
+      mode: OUTPUT
+  - platform: gpio
+    name: "Relay CH2"
+    pin:
+      sn74hc595: output_sr
+      number: 1
+      inverted: false
+      mode: OUTPUT
+  - platform: gpio
+    name: "Relay CH3"
+    pin:
+      sn74hc595: output_sr
+      number: 2
+      inverted: false
+      mode: OUTPUT
+  - platform: gpio
+    name: "Relay CH4"
+    pin:
+      sn74hc595: output_sr
+      number: 3
+      inverted: false
+      mode: OUTPUT
+  - platform: gpio
+    name: "Relay CH5"
+    pin:
+      sn74hc595: output_sr
+      number: 4
+      inverted: false
+      mode: OUTPUT
+  - platform: gpio
+    name: "Relay CH6"
+    pin:
+      sn74hc595: output_sr
+      number: 5
+      inverted: false
+      mode: OUTPUT
+
+output:
+  - platform: gpio
+    id: out_led_green
+    pin:
+      sn74hc595: output_sr
+      number: 6
+      inverted: false
+      mode: OUTPUT
+# Red LED is used as status_led
+  # - platform: gpio
+  #   id: out_led_red
+  #   pin:
+  #     sn74hc595: output_sr
+  #     number: 7
+  #     inverted: false
+  #     mode: OUTPUT
+
+light:
+# Green LED is used as network status led --> interval
+  # - platform: binary
+  #   name: LED green
+  #   output: out_led_green
+# Red LED is used as status_led
+  # - platform: binary
+  #   name: LED red
+  #   output: out_led_red
+
+#Red LED is used as status LED
+status_led:
+  pin:
+    sn74hc595: output_sr
+    number: 7
+    inverted: false
+    mode: OUTPUT
+
+button:
+  - platform: restart
+    name: Restart
+    entity_category: diagnostic
+
+sensor:
+# Enable dallas_temp if DS18B20 is connected to the board
+  # - platform: dallas_temp
+  #   name: Temperature
+  - platform: wifi_signal
+    name: 'WiFi Signal'
+    entity_category: diagnostic
+  - platform: uptime
+    name: 'Uptime'
+    entity_category: diagnostic
+    unit_of_measurement: s
+
+binary_sensor:
+  - platform: gpio
+    name: "Boot Button"
+    pin:
+      number: GPIO00
+      inverted: true
+
+text_sensor:
+  - platform: version
+    name: 'ESPHome Version'
+    entity_category: diagnostic
+  - platform: wifi_info
+    ip_address:
+      name: WiFi IP Address
+      entity_category: diagnostic
+    ssid:
+      name: WiFi SSID
+      entity_category: diagnostic
+    mac_address:
+      name: WiFi MAC Address
+      entity_category: diagnostic
+    dns_address:
+      name: WiFi DNS Address
+      entity_category: diagnostic
