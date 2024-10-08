@@ -5,7 +5,7 @@ This ESPHome configuration file can be used as starting template for your own pr
 All onboard components are preconfigured to work with Home Assistant.
 ## SoC
 The board uses a ESP32-S3-WROOM-1U-N16R8 which has 16MB flash and 8MB PSRAM.
-Because this board is not listed on platformio, esp32s3box is use as board. The ESP32-S3-Box uses the same SoC.
+Because this board is not listed on [PlatformIO](https://registry.platformio.org/platforms/platformio/espressif32/boards), `esp32s3box` is used as `board`. The ESP32-S3-Box uses the same SoC.
 ## OnBoard components
 ### Relays
 The 6 relays, which are controlled through a SN74HC595 shift-register, are configured as switches.
